@@ -1,68 +1,26 @@
-  name: Scan a project with Black Duck
-  
-  on:
-    push:
-      branches: [ master ]
-    pull_request:
-      branches: [ master ]
-    workflow_dispatch:
-  
-  jobs:
-    blackduck:
-      runs-on: ubuntu-latest
-      steps:
-      
-      - name: Checkout the code
-        uses: actions/checkout@v2
-        
-      # Install Python 3.9 for Black Duck Action
-      - name: Set up Python 3.9
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.9
-   
-      # Install Dependencies for Black Duck Action
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install blackduck_direct_scan_action
- 
-      # Run manual full/intelligent scan
-      - name: Run Black Duck Full Scan
-        if: ${{github.event_name == 'workflow_dispatch'}}
-        run: |
-          blackduck-direct-scan-action --bd_url ${{ secrets.BLACKDUCK_URL }} --bd_token ${{ secrets.BLACKDUCK_API_TOKEN }} --mode intelligent
-        env:
-          # Pass the GitHub token to the script in order to create PRs
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}        
+name: Detect-Action
+on: workflow_dispatch
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Java 11
+      uses: actions/setup-java@v3
+      with:
+        java-version: '11'
+        distribution: 'adopt'
 
-      # Run Black Duck rapid scan for pull request/commit/push
-      - name: Run Black Duck Directguidance Scan
-        if: ${{github.event_name != 'workflow_dispatch'}}
-        run: |
-          blackduck-direct-scan-action --bd_url ${{ secrets.BLACKDUCK_URL }} --bd_token ${{ secrets.BLACKDUCK_API_TOKEN }} --upgrade_major true
-        env:
-          # Pass the GitHub token to the script in order to create PRs
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}        
+    - name: Build my project with Maven
+      run: mvn clean package -DskipTests
 
-      - name: Black Duck security scan SARIF
-        uses: synopsys-sig-community/blackduck-direct-scan-action@v1
-        with:
-          bd_url: ${{ secrets.BLACKDUCK_URL }}
-          bd_token: ${{ secrets.BLACKDUCK_API_TOKEN }}
-          upgrade_major: true
-          sarif: blackduck-sarif.json  
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          
-      - name: "Check file existence"
-        id: check_files
-        uses: andstor/file-existence-action@v1
-        with:
-          files: "blackduck-sarif.json"
-      
-      - name: Upload SARIF file
-        if: steps.check_files.outputs.files_exists == 'true'
-        uses: github/codeql-action/upload-sarif@v1
-        with:
-          sarif_file: blackduck-sarif.json
+    - name: Run Synopsys Detect
+      uses: synopsys-sig/detect-action@v0.3.2
+      env:
+        NODE_EXTRA_CA_CERTS: ${{ secrets.LOCAL_CA_CERT_PATH }}
+      with:
+          scan-mode: RAPID # Can be omitted, since this is the default value
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          detect-version: 7.9.0
+          blackduck-url: ${{ secrets.BLACKDUCK_URL }}
+          blackduck-api-token: ${{ secrets.BLACKDUCK_API_TOKEN }}
